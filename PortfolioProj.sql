@@ -1,0 +1,150 @@
+--COVID Deaths Table
+SELECT *
+FROM [Portfolio Project]..['covid-deaths']
+WHERE continent is not null
+ORDER BY 3,4;
+
+--COVID Vaccinations Table
+SELECT *
+FROM [Portfolio Project]..['covid-vaccinations']
+WHERE continent is not null
+ORDER BY 3,4;
+
+--Selecting data that I want to see from COVID Deaths Table
+SELECT location, date, total_cases, new_cases, total_deaths,population
+FROM [Portfolio Project]..['covid-deaths']
+WHERE continent is not null
+ORDER BY 1,2;
+
+--Comparing total cases vs total deaths 
+--Shows the likelihood of dying if you contract COVID in the United States
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as death_percentage
+FROM [Portfolio Project]..['covid-deaths']
+WHERE location = 'United States'
+ORDER BY 1,2;
+
+--Comparing total cases vs population
+--Shows what percentage of US population has contracted COVID
+--What's wrong with this number, though? I think the data double counts people who were infected with COVID more than once
+SELECT date, population, total_cases, (total_cases/population)*100 as rate_infected
+FROM [Portfolio Project]..['covid-deaths']
+WHERE location = 'United States'
+ORDER BY 2;
+
+--Comparing highest infection rate within populations
+SELECT location, population, MAX(Total_cases) as highest_infection_count, MAX((total_cases/population))*100 as percent_population_infected
+FROM [Portfolio Project]..['covid-deaths']
+WHERE continent is not null
+GROUP BY location, population
+ORDER BY percent_population_infected desc;
+
+--Countries with highest death count per population
+SELECT location, MAX(cast(Total_deaths as int)) as total_death_count
+FROM [Portfolio Project]..['covid-deaths']
+WHERE continent is not null
+GROUP BY location
+ORDER BY Total_Death_Count desc;
+
+	-- GROUPING BY CONTINENT
+	SELECT location, MAX(cast(Total_deaths as int)) as total_death_count
+	FROM [Portfolio Project]..['covid-deaths']
+	WHERE continent is null AND location not LIKE '%income%' AND location NOT IN ('european union')
+	GROUP BY location
+	ORDER BY Total_Death_Count desc;
+	--GOAL: I would love to SELECT & GROUP BY continent instead of location.
+
+	-- incorrect numbers but we're going with it for tableau
+	--showing continents with highest death count per population
+	SELECT continent, SUM(CAST(new_deaths as int)) as total_death_count
+	FROM [Portfolio Project]..['covid-deaths']
+	WHERE continent is not null
+	GROUP BY continent
+	ORDER BY Total_Death_Count desc;
+
+
+	--GLOBAL NUMBERS
+	--BY DAY
+SELECT date, sum(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(new_cases)*100 as death_percentage--, sum(total_deaths, (total_deaths/total_cases)*100 as death_percentage
+FROM [Portfolio Project]..['covid-deaths']
+WHERE continent is not null
+GROUP BY date
+ORDER BY 1,2;
+
+	--TOTAL
+SELECT sum(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(new_cases)*100 as death_percentage--, sum(total_deaths, (total_deaths/total_cases)*100 as death_percentage
+FROM [Portfolio Project]..['covid-deaths']
+WHERE continent is not null
+ORDER BY 1,2;
+
+-------------------------------vaccinations
+
+SELECT *
+FROM [Portfolio Project]..['covid-deaths'] dea
+JOIN [Portfolio Project]..['covid-vaccinations'] vac
+	ON dea.location= vac.location
+	AND dea.date = vac.date;
+
+--Comparing total population vs fully vaccinated population
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.people_fully_vaccinated
+, ((people_fully_vaccinated/population)*100) as percent_fully_vaccinated
+FROM [Portfolio Project]..['covid-deaths'] dea
+JOIN [Portfolio Project]..['covid-vaccinations'] vac
+	ON dea.location= vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null AND vac.people_fully_vaccinated is not null
+ORDER BY 2,3;
+
+
+--USE CTE (even though these numbers are all wrong AGH)
+WITH POPVAC (continent, location, date, population, new_vaccinations, rolling_people_vaccinated)
+as
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(convert(bigint,vac.new_vaccinations)) OVER (PARTITION BY dea.location 
+ORDER BY dea.location, dea.date) as rolling_people_vaccinated
+FROM [Portfolio Project]..['covid-deaths'] dea
+JOIN [Portfolio Project]..['covid-vaccinations'] vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null
+)
+SELECT *, ((rolling_people_vaccinated/population)*100) as percent_fully_vaccinated
+FROM POPVAC;
+
+
+--Temp Table
+CREATE TABLE #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+location nvarchar(255),
+Date datetime,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+INSERT INTO #PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(convert(bigint,vac.new_vaccinations)) OVER (PARTITION BY dea.location 
+ORDER BY dea.location, dea.date) as rolling_people_vaccinated
+FROM [Portfolio Project]..['covid-deaths'] dea
+JOIN [Portfolio Project]..['covid-vaccinations'] vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null
+
+SELECT *
+FROM #PercentPopulationVaccinated
+ORDER BY location, date;
+
+
+--Creating view fo visualizations
+Create View PercentPopulationVaccinated as
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(convert(bigint,vac.new_vaccinations)) OVER (PARTITION BY dea.location 
+ORDER BY dea.location, dea.date) as rolling_people_vaccinated
+FROM [Portfolio Project]..['covid-deaths'] dea
+JOIN [Portfolio Project]..['covid-vaccinations'] vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent is not null
+--ORDER BY 2,3
